@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const API_BASE = "https://mental-health-score-predictor-mlops-1.onrender.com";
+  const API_BASE = "https://mansik-santulan-score.onrender.com";
 
   const form = document.getElementById("predict-form");
   const submitBtn = document.getElementById("submit-btn");
@@ -17,30 +17,77 @@
   const scoreBandEl = document.getElementById("score-band");
   const scoreContextEl = document.getElementById("score-context");
   const gaugeFill = document.getElementById("gauge-fill");
+  const gaugeMarker = document.getElementById("gauge-marker");
   const errorLabelEl = document.getElementById("error-label");
   const errorCopyEl = document.getElementById("error-copy");
 
-  const GAUGE_ARC_LENGTH = 314; // approx pi * r(100)
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // ---------------------------------------------------------
-  // Draw tick marks on both gauges (0..10, every 2 units)
+  // Fit a circle through 3 points (used to find each gauge's
+  // true center/radius directly from its path, rather than
+  // assuming geometry by hand — keeps ticks/needle exact even
+  // if the arc's "d" ever changes).
+  // ---------------------------------------------------------
+  function circleFrom3Points(a, b, c) {
+    const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    const ux =
+      ((a.x * a.x + a.y * a.y) * (b.y - c.y) +
+        (b.x * b.x + b.y * b.y) * (c.y - a.y) +
+        (c.x * c.x + c.y * c.y) * (a.y - b.y)) / d;
+    const uy =
+      ((a.x * a.x + a.y * a.y) * (c.x - b.x) +
+        (b.x * b.x + b.y * b.y) * (a.x - c.x) +
+        (c.x * c.x + c.y * c.y) * (b.x - a.x)) / d;
+    return { x: ux, y: uy };
+  }
+
+  // ---------------------------------------------------------
+  // Draw tick marks on both gauges (0..10, every 2 units),
+  // sampled directly off each gauge's own track path so they
+  // always sit exactly on the arc.
   // ---------------------------------------------------------
   function drawTicks() {
-    document.querySelectorAll(".gauge-ticks").forEach((g) => {
-      g.innerHTML = "";
-      const cx = 120, cy = 140, rOuter = 100, rInner = 90;
+    document.querySelectorAll(".gauge").forEach((svg) => {
+      const track = svg.querySelector(".gauge-track");
+      const tickGroup = svg.querySelector(".gauge-ticks");
+      if (!track || !tickGroup) return;
+
+      tickGroup.innerHTML = "";
+      const total = track.getTotalLength();
+      const center = circleFrom3Points(
+        track.getPointAtLength(0),
+        track.getPointAtLength(total / 2),
+        track.getPointAtLength(total)
+      );
+      const tickDepth = 11;
+
       for (let i = 0; i <= 10; i += 2) {
-        const angle = Math.PI - (i / 10) * Math.PI; // 180deg -> 0deg
-        const x1 = cx + rOuter * Math.cos(angle);
-        const y1 = cy - rOuter * Math.sin(angle);
-        const x2 = cx + rInner * Math.cos(angle);
-        const y2 = cy - rInner * Math.sin(angle);
+        const dist = total * (i / 10);
+        const p = track.getPointAtLength(dist);
+
+        // tangent direction at this point, via a tiny step either side
+        const d1 = Math.max(0, dist - 1);
+        const d2 = Math.min(total, dist + 1);
+        const pa = track.getPointAtLength(d1);
+        const pb = track.getPointAtLength(d2);
+        const tx = pb.x - pa.x, ty = pb.y - pa.y;
+        const tlen = Math.hypot(tx, ty) || 1;
+
+        // normal to the tangent, oriented toward the arc's center
+        let nx = -ty / tlen, ny = tx / tlen;
+        const towardCenterX = center.x - p.x, towardCenterY = center.y - p.y;
+        if (nx * towardCenterX + ny * towardCenterY < 0) {
+          nx = -nx;
+          ny = -ny;
+        }
+
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", x1.toFixed(1));
-        line.setAttribute("y1", y1.toFixed(1));
-        line.setAttribute("x2", x2.toFixed(1));
-        line.setAttribute("y2", y2.toFixed(1));
-        g.appendChild(line);
+        line.setAttribute("x1", p.x.toFixed(1));
+        line.setAttribute("y1", p.y.toFixed(1));
+        line.setAttribute("x2", (p.x + nx * tickDepth).toFixed(1));
+        line.setAttribute("y2", (p.y + ny * tickDepth).toFixed(1));
+        tickGroup.appendChild(line);
       }
     });
   }
@@ -180,24 +227,55 @@
     };
   }
 
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function animateGauge(score) {
+    const total = gaugeFill.getTotalLength();
+    gaugeFill.style.transition = "none";
+    gaugeFill.style.strokeDasharray = String(total);
+    gaugeFill.style.strokeDashoffset = String(total);
+
+    const setFrac = (frac) => {
+      gaugeFill.style.strokeDashoffset = String(total * (1 - frac));
+      if (gaugeMarker) {
+        const p = gaugeFill.getPointAtLength(total * frac);
+        gaugeMarker.setAttribute("cx", p.x.toFixed(1));
+        gaugeMarker.setAttribute("cy", p.y.toFixed(1));
+      }
+    };
+
+    if (prefersReducedMotion) {
+      setFrac(score / 10);
+      scoreNumberEl.textContent = score.toFixed(2);
+      return;
+    }
+
+    const duration = 1100;
+    const start = performance.now();
+
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = easeOutCubic(t);
+      const currentScore = score * eased;
+      setFrac(currentScore / 10);
+      scoreNumberEl.textContent = currentScore.toFixed(2);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
   function renderResult(score) {
     const clamped = Math.max(0, Math.min(10, score));
     const { label, context } = bandFor(clamped);
 
-    scoreNumberEl.textContent = score.toFixed(2);
     scoreBandEl.textContent = label;
     scoreContextEl.textContent = context;
-
-    // reset then animate the arc fill on next frame
-    gaugeFill.style.transition = "none";
-    gaugeFill.style.strokeDashoffset = String(GAUGE_ARC_LENGTH);
-    requestAnimationFrame(() => {
-      gaugeFill.style.transition = "";
-      const offset = GAUGE_ARC_LENGTH * (1 - clamped / 10);
-      gaugeFill.style.strokeDashoffset = String(offset);
-    });
+    scoreBandEl.dataset.tier = clamped < 4 ? "strained" : clamped < 7 ? "balanced" : "strong";
 
     showState("result");
+    animateGauge(clamped);
   }
 
   function renderError(label, copy) {
@@ -281,7 +359,7 @@
     } catch (err) {
       renderError(
         "Can't reach the server",
-        `Couldn't connect to ${API_BASE}. Make sure the backend is running (uvicorn main:app --port 2200 --reload) and reachable from this page.`
+        "The prediction server didn't respond. Free-tier hosting like this can take up to a minute to wake up after sitting idle — wait a few seconds and try again."
       );
     } finally {
       setSubmitting(false);

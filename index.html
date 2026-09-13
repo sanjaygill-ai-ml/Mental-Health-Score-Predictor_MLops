@@ -12,11 +12,10 @@
 <body>
 
 <div class="noise-overlay" aria-hidden="true"></div>
-<div class="scan-sweep" aria-hidden="true"></div>
 
 <header class="site-header">
   <div class="header-inner">
-    <span class="eyebrow"><span class="status-dot" aria-hidden="true"></span>Student Wellness Analytics</span>
+    <span class="eyebrow">Student Wellness Analytics</span>
     <h1 class="title">Mental Health <em>Signal</em></h1>
     <p class="subtitle">A quick read on how habits, screen time, and stress are trending — modeled from your daily rhythm, not a diagnosis.</p>
   </div>
@@ -198,15 +197,15 @@
         <svg class="gauge gauge-result" viewBox="0 0 240 160" aria-hidden="true">
           <defs>
             <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#FF6B5E"/>
-              <stop offset="45%" stop-color="#F5A623"/>
-              <stop offset="100%" stop-color="#3ED9AE"/>
+              <stop offset="0%" stop-color="#D9534F"/>
+              <stop offset="45%" stop-color="#E3B341"/>
+              <stop offset="100%" stop-color="#4C9A78"/>
             </linearGradient>
           </defs>
           <path class="gauge-track" d="M 30 140 A 100 100 0 0 1 210 140" />
           <path class="gauge-fill" id="gauge-fill" d="M 30 140 A 100 100 0 0 1 210 140" />
           <g class="gauge-ticks"></g>
-          <circle class="gauge-needle-hub" cx="120" cy="140" r="5" />
+          <circle class="gauge-marker" id="gauge-marker" cx="30" cy="140" r="7" />
         </svg>
         <div class="score-readout">
           <span class="score-number" id="score-number">0.0</span>
@@ -219,7 +218,7 @@
 
       <div class="state state-error" id="state-error" hidden>
         <div class="error-icon" aria-hidden="true">!</div>
-        <p class="error-label" id="error-label">Signal lost</p>
+        <p class="error-label" id="error-label"></p>
         <p class="error-copy" id="error-copy"></p>
         <button type="button" class="reset-btn" id="error-retry-btn">Try again</button>
       </div>
